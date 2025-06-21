@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}{{ item.titulo }} - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-8 offset-md-2">
+        <nav aria-label="breadcrumb" class="mb-4">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="/itens">Meus Itens</a></li>
+                <li class="breadcrumb-item active">{{ item.titulo }}</li>
+            </ol>
+        </nav>
+
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h1 class="card-title">{{ item.titulo }}</h1>
+                    {% if item.favorito %}
+                    <span class="badge bg-warning fs-5">⭐ Favorito</span>
+                    {% endif %}
+                </div>
+
+                <div class="mb-4">
+                    <h5>Informações</h5>
+                    <ul class="list-unstyled">
+                        <li><strong>Tipo:</strong> {{ item.tipo | title }}</li>
+                        <li>
+                            <strong>Status:</strong>
+                            {% if item.status == "para_ler" %}
+                            <span class="badge bg-secondary">Para {{ "Ler" if item.tipo == "livro" else "Ver" }}</span>
+                            {% elif item.status == "lendo" %}
+                            <span class="badge bg-primary">{{ "Lendo" if item.tipo == "livro" else "Assistindo" }}</span>
+                            {% else %}
+                            <span class="badge bg-success">Completado</span>
+                            {% endif %}
+                        </li>
+                        {% if item.tags %}
+                        <li class="mt-2">
+                            <strong>Tags:</strong><br>
+                            {% for tag in item.tags %}
+                            <span class="badge bg-info me-1">{{ tag }}</span>
+                            {% endfor %}
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+
+                {% if item.descricao %}
+                <div class="mb-4">
+                    <h5>Descrição</h5>
+                    <p>{{ item.descricao }}</p>
+                </div>
+                {% endif %}
+
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <a href="/itens/{{ item.id }}/editar" class="btn btn-primary">Editar</a>
+                        <form action="/itens/{{ item.id }}/deletar" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-danger" onclick="return confirm('Tem certeza que deseja excluir este item?')">Excluir</button>
+                        </form>
+                    </div>
+                    <a href="/itens" class="btn btn-secondary">Voltar</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+{% endblock %}

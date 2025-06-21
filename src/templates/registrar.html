@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Registrar - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <div class="card">
+            <div class="card-body">
+                <h2 class="card-title text-center mb-4">Criar Conta</h2>
+                
+                {% if erro %}
+                <div class="alert alert-danger">{{ erro }}</div>
+                {% endif %}
+
+                <form id="registroForm">
+                    <div class="mb-3">
+                        <label for="email" class="form-label">Email</label>
+                        <input type="email" class="form-control" id="email" name="email" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="nome_usuario" class="form-label">Nome de Usuário</label>
+                        <input type="text" class="form-control" id="nome_usuario" name="nome_usuario" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="senha" class="form-label">Senha</label>
+                        <input type="password" class="form-control" id="senha" name="senha" required>
+                    </div>
+                    <div class="d-grid">
+                        <button type="submit" class="btn btn-primary">Registrar</button>
+                    </div>
+                </form>
+
+                <hr class="my-4">
+
+                <div class="text-center">
+                    <p>Já tem uma conta? <a href="/login">Faça login</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('registroForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = {
+        email: document.getElementById('email').value,
+        nome_usuario: document.getElementById('nome_usuario').value,
+        senha: document.getElementById('senha').value
+    };
+
+    try {
+        const response = await fetch('/registrar', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+            // Redirecionar para login após registro bem-sucedido
+            window.location.href = '/login?registrado=true';
+        } else {
+            const data = await response.json();
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger';
+            errorDiv.textContent = data.detail || 'Erro ao registrar usuário';
+            document.getElementById('registroForm').insertBefore(errorDiv, document.getElementById('registroForm').firstChild);
+        }
+    } catch (error) {
+        console.error('Erro:', error);
+    }
+});
+</script>
+{% endblock %}

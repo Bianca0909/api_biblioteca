@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Meus Itens - Biblioteca Pessoal{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h1>Meus Itens</h1>
+    </div>
+    <div class="col-auto">
+        <a href="/itens/novo" class="btn btn-primary">Adicionar Item</a>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <select name="tipo" class="form-select">
+                    <option value="">Todos os Tipos</option>
+                    <option value="livro">Livros</option>
+                    <option value="filme">Filmes</option>
+                    <option value="serie">Séries</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select">
+                    <option value="">Todos os Status</option>
+                    <option value="para_ler">Para Ler/Ver</option>
+                    <option value="lendo">Em Andamento</option>
+                    <option value="completado">Completado</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="form-check">
+                    <input type="checkbox" name="favorito" class="form-check-input" id="favorito">
+                    <label class="form-check-label" for="favorito">Apenas Favoritos</label>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <button type="submit" class="btn btn-secondary">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    {% for item in itens %}
+    <div class="col">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <h5 class="card-title">{{ item.titulo }}</h5>
+                    {% if item.favorito %}
+                    <span class="badge bg-warning">⭐ Favorito</span>
+                    {% endif %}
+                </div>
+                <h6 class="card-subtitle mb-2 text-muted">
+                    {{ item.tipo | title }}
+                    {% if item.status == "para_ler" %}
+                    <span class="badge bg-secondary">Para {{ "Ler" if item.tipo == "livro" else "Ver" }}</span>
+                    {% elif item.status == "lendo" %}
+                    <span class="badge bg-primary">{{ "Lendo" if item.tipo == "livro" else "Assistindo" }}</span>
+                    {% else %}
+                    <span class="badge bg-success">Completado</span>
+                    {% endif %}
+                </h6>
+                <p class="card-text">{{ item.descricao }}</p>
+                {% if item.tags %}
+                <div class="mb-2">
+                    {% for tag in item.tags %}
+                    <span class="badge bg-info">{{ tag }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+                <div class="d-flex justify-content-between">
+                    <a href="/itens/{{ item.id }}" class="btn btn-sm btn-primary">Detalhes</a>
+                    <div>
+                        <a href="/itens/{{ item.id }}/editar" class="btn btn-sm btn-secondary">Editar</a>
+                        <form action="/itens/{{ item.id }}/deletar" method="POST" style="display: inline;">
+                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Tem certeza que deseja excluir este item?')">Excluir</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% else %}
+    <div class="col-12">
+        <div class="alert alert-info">
+            Nenhum item encontrado. <a href="/itens/novo">Adicione seu primeiro item!</a>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+
+{% endblock %}
