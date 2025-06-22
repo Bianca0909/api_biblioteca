@@ -1,0 +1,38 @@
+{% extends "base.html" %} {% block content %}
+<div class="container mt-4">
+  <div class="row mb-4">
+    <div class="col">
+      <h2>Bem-vindo(a), {{ usuario_atual.nome_usuario }}!</h2>
+      <p class="lead">
+        Gerencie sua biblioteca pessoal de forma simples e organizada.
+      </p>
+    </div>
+  </div>
+
+  <div class="row mb-4">
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">Meus Itens</h5>
+          <p class="card-text">
+            Visualize todos os seus livros, filmes e séries cadastrados.
+          </p>
+          <a href="/itens" class="btn btn-primary">Ver Todos</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card h-100">
+        <div class="card-body">
+          <h5 class="card-title">Adicionar Item</h5>
+          <p class="card-text">
+            Cadastre um novo livro, filme ou série em sua biblioteca.
+          </p>
+          <a href="/itens/criar" class="btn btn-success">Novo Item</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

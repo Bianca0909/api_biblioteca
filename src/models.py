@@ -1,8 +1,17 @@
 from schemas import TipoItem, StatusItem
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum as SQLEnum, ForeignKey
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Boolean,
+    DateTime,
+    Enum as SQLEnum,
+    ForeignKey,
+)
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
+
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -13,6 +22,7 @@ class Usuario(Base):
     senha_hash = Column(String)
     criado_em = Column(DateTime, default=datetime.utcnow)
     itens = relationship("Item", back_populates="dono")
+
 
 class Item(Base):
     __tablename__ = "itens"

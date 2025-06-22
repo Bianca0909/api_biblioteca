@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h2>Cadastrar Novo Item</h2>
+    <form id="form-criar-item" class="mt-4">
+        <div class="mb-3">
+            <label for="titulo" class="form-label">Título</label>
+            <input type="text" class="form-control" id="titulo" name="titulo" required minlength="3">
+        </div>
+        <div class="mb-3">
+            <label for="descricao" class="form-label">Descrição</label>
+            <textarea class="form-control" id="descricao" name="descricao" rows="3" required minlength="10"></textarea>
+        </div>
+        <div class="mb-3">
+            <label for="tipo" class="form-label">Tipo</label>
+            <select class="form-select" id="tipo" name="tipo" required>
+                <option value="">Selecione o tipo</option>
+                <option value="LIVRO">Livro</option>
+                <option value="FILME">Filme</option>
+                <option value="SERIE">Série</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="tags" class="form-label">Tags (separadas por vírgula)</label>
+            <input type="text" class="form-control" id="tags" name="tags" placeholder="ex: aventura, ficção, ação">
+        </div>
+        <button type="submit" class="btn btn-primary">Cadastrar</button>
+    </form>
+</div>
+
+<script>
+document.getElementById('form-criar-item').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const data = {
+        titulo: formData.get('titulo'),
+        descricao: formData.get('descricao'),
+        tipo: formData.get('tipo'),
+        tags: formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag)
+    };
+    
+    try {
+        const response = await fetch('/itens/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': localStorage.getItem('token')
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (response.ok) {
+            window.location.href = '/itens';
+        } else {
+            const error = await response.json();
+            alert(error.detail || 'Erro ao criar item');
+        }
+    } catch (error) {
+        alert('Erro ao criar item');
+    }
+});
+</script>
+{% endblock %}
