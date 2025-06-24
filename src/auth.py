@@ -1,8 +1,8 @@
 import jwt
 from datetime import datetime, timedelta, timezone
 import bcrypt
-from fastapi import HTTPException, Security, Depends
-from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
+from fastapi import HTTPException, Security, Depends, Request
+from fastapi.security import APIKeyHeader
 from sqlalchemy.orm import Session
 from models import Usuario
 import schemas
@@ -12,8 +12,21 @@ CHAVE_SECRETA = "biblioteca_api_secret_key"
 ALGORITMO = "HS256"
 MINUTOS_EXPIRACAO_TOKEN = 30
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 api_key_header = APIKeyHeader(name="Authorization")
+
+def get_token_from_cookie(request: Request) -> str:
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(
+            status_code=401,
+            detail="Não autenticado",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Remove 'Bearer ' prefix if present
+    if token.startswith("Bearer "):
+        token = token[7:]
+    return token
 
 
 def criar_token_acesso(data: dict):
@@ -37,8 +50,10 @@ def verificar_token(token: str):
 
 
 def obter_usuario_atual(
-    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
+    request: Request,
+    db: Session = Depends(get_db)
 ) -> Usuario:
+    token = get_token_from_cookie(request)
     erro_credenciais = HTTPException(
         status_code=401,
         detail="Credenciais inválidas",

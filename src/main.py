@@ -2,6 +2,7 @@ from datetime import timedelta
 from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db, engine
@@ -9,7 +10,6 @@ from models import Base, Item, Usuario
 from schemas import (
     ItemCreate,
     UsuarioCreate,
-    LoginUsuario,
     TipoItem,
     StatusItem,
     ItemUpdate,
@@ -27,20 +27,27 @@ app = FastAPI(
 
 templates = Jinja2Templates(directory="templates")
 
+# Mount static files directory
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def pagina_inicial(request: Request):
-    return templates.TemplateResponse("home.html", {"request": request})
+    try:
+        usuario_atual = await obter_usuario_atual(request, next(get_db()))
+    except HTTPException:
+        usuario_atual = None
+    return templates.TemplateResponse("home.html", {"request": request, "usuario_atual": usuario_atual})
 
 
-@app.get("/login", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse) ## Ok
 async def pagina_login(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
 
 @app.get("/registrar", response_class=HTMLResponse)
 async def pagina_registro(request: Request):
-    return templates.TemplateResponse("registrar.html", {"request": request})
+    return templates.TemplateResponse("registrar.html", {"request": request, "erro": None})
 
 
 @app.get("/itens", response_class=HTMLResponse)
@@ -50,9 +57,16 @@ async def pagina_itens(
     usuario_atual: Usuario = Depends(obter_usuario_atual),
 ):
     itens = db.query(Item).filter(Item.id_dono == usuario_atual.id).all()
+    # Convert comma-separated tags to lists
+    for item in itens:
+        item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
     return templates.TemplateResponse(
-        "listar_itens.html", {"request": request, "itens": itens}
+        "listar_itens.html", {"request": request, "itens": itens, "usuario_atual": usuario_atual}
     )
+
+@app.get("/itens/novo", response_class=HTMLResponse)
+async def pagina_novo_item(request: Request):
+    return RedirectResponse(url="/itens/criar", status_code=303)
 
 
 @app.get("/itens/{item_id}", response_class=HTMLResponse)
@@ -69,34 +83,54 @@ async def pagina_detalhe_item(
     )
     if not item:
         raise HTTPException(status_code=404, detail="Item não encontrado")
+    
+    # Convert comma-separated tags to list
+    item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
+    
     return templates.TemplateResponse(
-        "detalhe_item.html", {"request": request, "item": item}
+        "detalhe_item.html", {"request": request, "item": item, "usuario_atual": usuario_atual}
     )
 
 
-@app.post("/registrar")
-def registrar_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
+@app.post("/registrar", response_class=HTMLResponse)
+async def registrar_usuario(request: Request, db: Session = Depends(get_db)):
+    form = await request.form()
+    email = form.get("email")
+    nome_usuario = form.get("nome_usuario")
+    senha = form.get("senha")
+
+    if not all([email, nome_usuario, senha]):
+        return templates.TemplateResponse(
+            "registrar.html",
+            {"request": request, "erro": "Todos os campos são obrigatórios"},
+            status_code=400
+        )
+
     db_usuario = (
         db.query(Usuario)
         .filter(
-            (Usuario.email == usuario.email)
-            | (Usuario.nome_usuario == usuario.nome_usuario)
+            (Usuario.email == email)
+            | (Usuario.nome_usuario == nome_usuario)
         )
         .first()
     )
     if db_usuario:
-        raise HTTPException(
-            status_code=400, detail="Email ou nome de usuário já registrado"
+        return templates.TemplateResponse(
+            "registrar.html",
+            {"request": request, "erro": "Email ou nome de usuário já registrado"},
+            status_code=400
         )
 
-    senha_hash = hash_senha(usuario.senha)
+    senha_hash = hash_senha(senha)
     db_usuario = Usuario(
-        email=usuario.email, nome_usuario=usuario.nome_usuario, senha_hash=senha_hash
+        email=email, nome_usuario=nome_usuario, senha_hash=senha_hash
     )
     db.add(db_usuario)
     db.commit()
     db.refresh(db_usuario)
-    return db_usuario
+
+    # After successful registration, redirect to login page
+    return RedirectResponse(url="/login", status_code=303)
 
 
 @app.post("/login")
@@ -114,8 +148,11 @@ async def login(request: Request, db: Session = Depends(get_db)):
             status_code=400,
         )
 
-    # Redireciona para a página inicial após login bem-sucedido
-    return RedirectResponse(url="/", status_code=303)
+    # Gera o token JWT
+    token = criar_token_acesso({"sub": db_usuario.email})
+    response = RedirectResponse(url="/", status_code=303)
+    response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
+    return response
 
 
 @app.post("/itens/criar")  # 3
