@@ -4,18 +4,11 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
-from typing import Optional
 from database import get_db, engine
 from models import Base, Item, Usuario
-from schemas import (
-    ItemCreate,
-    TipoItem,
-    StatusItem,
-    ItemUpdate,
-)
+from schemas import ItemCreate, ItemUpdate
 from auth import create_token, hash_password, verify_password, get_current_user, MINUTOS_EXPIRACAO_TOKEN
 
-# Create database tables
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
@@ -25,8 +18,6 @@ app = FastAPI(
 )
 
 templates = Jinja2Templates(directory="templates")
-
-# Mount static files directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
@@ -40,7 +31,7 @@ async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     return templates.TemplateResponse("home.html", {"request": request, "usuario_atual": usuario})
 
 
-@app.get("/login", response_class=HTMLResponse) ## Ok
+@app.get("/login", response_class=HTMLResponse)
 async def pagina_login(request: Request):
     return templates.TemplateResponse("login.html", {"request": request})
 
@@ -60,7 +51,6 @@ async def pagina_itens(
     if not usuario:
         raise HTTPException(status_code=401, detail="Usuário não encontrado")
     itens = db.query(Item).filter(Item.id_dono == usuario.id).all()
-    # Convert comma-separated tags to lists
     for item in itens:
         item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
     return templates.TemplateResponse(
@@ -84,12 +74,9 @@ async def criar_item(
     usuario_atual: str = Depends(get_current_user),
 ):
     request_data = await request.json()
-    print("Received item data:", request_data)
     try:
         item = ItemCreate(**request_data)
-        print("Validated item:", item.model_dump())
     except Exception as e:
-        print("Validation error:", str(e))
         raise
     usuario = db.query(Usuario).filter(Usuario.email == usuario_atual).first()
     if not usuario:
@@ -222,7 +209,6 @@ async def login(request: Request, db: Session = Depends(get_db)):
             status_code=400,
         )
 
-    # Gera o token JWT
     token = create_token({"sub": db_usuario.email}, timedelta(minutes=MINUTOS_EXPIRACAO_TOKEN))
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
@@ -284,7 +270,6 @@ async def pagina_editar_item(
     if item is None:
         raise HTTPException(status_code=404, detail="Item não encontrado")
     
-    # Convert comma-separated tags to list
     item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
     
     return templates.TemplateResponse(
@@ -310,16 +295,14 @@ async def atualizar_item(
 
     data = await request.json()
     
-    # Validate the update data using Pydantic
     try:
         update_data = ItemUpdate(**data)
     except ValidationError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    # Update the item fields
     for field, value in update_data.dict(exclude_unset=True).items():
         if field == "tags":
-            value = ",".join(value)  # Convert list to comma-separated string
+            value = ",".join(value)
         setattr(db_item, field, value)
 
     db.commit()
