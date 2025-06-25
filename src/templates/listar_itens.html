@@ -5,48 +5,11 @@ endblock %} {% block content %}
     <h1>Meus Itens</h1>
   </div>
   <div class="col-auto">
-    <a href="/itens/novo" class="btn btn-primary">Adicionar Item</a>
+    <a href="/itens/criar" class="btn btn-primary">Adicionar Item</a>
   </div>
 </div>
 
-<div class="row mb-3">
-  <div class="col">
-    <form method="GET" class="row g-3">
-      <div class="col-md-3">
-        <select name="tipo" class="form-select">
-          <option value="">Todos os Tipos</option>
-          <option value="livro">Livros</option>
-          <option value="filme">Filmes</option>
-          <option value="serie">Séries</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <select name="status" class="form-select">
-          <option value="">Todos os Status</option>
-          <option value="para_ler">Para Ler/Ver</option>
-          <option value="lendo">Em Andamento</option>
-          <option value="completado">Completado</option>
-        </select>
-      </div>
-      <div class="col-md-3">
-        <div class="form-check">
-          <input
-            type="checkbox"
-            name="favorito"
-            class="form-check-input"
-            id="favorito"
-          />
-          <label class="form-check-label" for="favorito"
-            >Apenas Favoritos</label
-          >
-        </div>
-      </div>
-      <div class="col-md-3">
-        <button type="submit" class="btn btn-secondary">Filtrar</button>
-      </div>
-    </form>
-  </div>
-</div>
+
 
 <div class="row row-cols-1 row-cols-md-3 g-4">
   {% for item in itens %}
@@ -90,19 +53,9 @@ endblock %} {% block content %}
               class="btn btn-sm btn-secondary"
               >Editar</a
             >
-            <form
-              action="/itens/{{ item.id }}/deletar"
-              method="POST"
-              style="display: inline"
-            >
-              <button
-                type="submit"
-                class="btn btn-sm btn-danger"
-                onclick="return confirm('Tem certeza que deseja excluir este item?')"
-              >
-                Excluir
-              </button>
-            </form>
+            <button type="button" class="btn btn-sm btn-danger" data-id="{{ item.id }}" data-title="{{ item.titulo }}" onclick="showDeleteModal(this)">
+              Excluir
+            </button>
           </div>
         </div>
       </div>
@@ -112,10 +65,50 @@ endblock %} {% block content %}
   <div class="col-12">
     <div class="alert alert-info">
       Nenhum item encontrado.
-      <a href="/itens/novo">Adicione seu primeiro item!</a>
+      <a href="/itens/criar">Adicione seu primeiro item!</a>
     </div>
   </div>
   {% endfor %}
 </div>
+
+<!-- Modal de Confirmação de Exclusão -->
+<div class="modal fade" id="deleteModal" tabindex="-1" aria-labelledby="deleteModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteModalLabel">Confirmar Exclusão</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fechar"></button>
+      </div>
+      <div class="modal-body">
+        Tem certeza que deseja excluir o item <strong id="deleteItemTitle"></strong>?
+        <br>
+        <small class="text-danger">Esta ação não pode ser desfeita.</small>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <form id="deleteForm" method="POST" style="display: inline">
+          <button type="submit" class="btn btn-danger">Excluir</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function showDeleteModal(button) {
+  const modal = document.getElementById('deleteModal');
+  const deleteForm = document.getElementById('deleteForm');
+  const deleteItemTitle = document.getElementById('deleteItemTitle');
+  
+  const itemId = button.dataset.id;
+  const itemTitle = button.dataset.title;
+  
+  deleteForm.action = '/itens/' + itemId + '/deletar';
+  deleteItemTitle.textContent = itemTitle;
+  
+  const bsModal = new bootstrap.Modal(modal);
+  bsModal.show();
+}
+</script>
 
 {% endblock %}

@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Request, HTTPException, Depends, status, Response
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,12 +9,11 @@ from database import get_db, engine
 from models import Base, Item, Usuario
 from schemas import (
     ItemCreate,
-    UsuarioCreate,
     TipoItem,
     StatusItem,
     ItemUpdate,
 )
-from auth import hash_senha, verificar_senha, obter_usuario_atual
+from auth import create_token, hash_password, verify_password, get_current_user, MINUTOS_EXPIRACAO_TOKEN
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -32,12 +31,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 @app.get("/", response_class=HTMLResponse)
-async def pagina_inicial(request: Request):
+async def pagina_inicial(request: Request, db: Session = Depends(get_db)):
     try:
-        usuario_atual = await obter_usuario_atual(request, next(get_db()))
+        email = await get_current_user(request)
+        usuario = db.query(Usuario).filter(Usuario.email == email).first()
     except HTTPException:
-        usuario_atual = None
-    return templates.TemplateResponse("home.html", {"request": request, "usuario_atual": usuario_atual})
+        usuario = None
+    return templates.TemplateResponse("home.html", {"request": request, "usuario_atual": usuario})
 
 
 @app.get("/login", response_class=HTMLResponse) ## Ok
@@ -54,9 +54,12 @@ async def pagina_registro(request: Request):
 async def pagina_itens(
     request: Request,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
 ):
-    itens = db.query(Item).filter(Item.id_dono == usuario_atual.id).all()
+    usuario = db.query(Usuario).filter(Usuario.email == usuario_atual).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+    itens = db.query(Item).filter(Item.id_dono == usuario.id).all()
     # Convert comma-separated tags to lists
     for item in itens:
         item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
@@ -64,21 +67,60 @@ async def pagina_itens(
         "listar_itens.html", {"request": request, "itens": itens, "usuario_atual": usuario_atual}
     )
 
-@app.get("/itens/novo", response_class=HTMLResponse)
-async def pagina_novo_item(request: Request):
-    return RedirectResponse(url="/itens/criar", status_code=303)
+@app.get("/itens/criar", response_class=HTMLResponse)
+async def pagina_criar_item(request: Request, db: Session = Depends(get_db)):
+    try:
+        email = await get_current_user(request)
+        usuario = db.query(Usuario).filter(Usuario.email == email).first()
+        return templates.TemplateResponse("criar_item.html", {"request": request, "usuario_atual": usuario, "item": None})
+    except HTTPException:
+        return RedirectResponse(url="/login", status_code=303)
 
+@app.post("/itens/criar", status_code=status.HTTP_201_CREATED)
+async def criar_item(
+    request: Request,
+    item: ItemCreate,
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
+):
+    request_data = await request.json()
+    print("Received item data:", request_data)
+    try:
+        item = ItemCreate(**request_data)
+        print("Validated item:", item.model_dump())
+    except Exception as e:
+        print("Validation error:", str(e))
+        raise
+    usuario = db.query(Usuario).filter(Usuario.email == usuario_atual).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+
+    db_item = Item(
+        titulo=item.titulo,
+        tipo=item.tipo,
+        status=item.status,
+        descricao=item.descricao,
+        avaliacao=item.avaliacao,
+        tags=",".join(item.tags),
+        favorito=item.favorito,
+        id_dono=usuario.id,
+    )
+    db.add(db_item)
+    db.commit()
+    db.refresh(db_item)
+    return db_item
 
 @app.get("/itens/{item_id}", response_class=HTMLResponse)
 async def pagina_detalhe_item(
     request: Request,
     item_id: int,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
 ):
     item = (
         db.query(Item)
-        .filter(Item.id == item_id, Item.id_dono == usuario_atual.id)
+        .join(Usuario)
+        .filter(Item.id == item_id, Usuario.email == usuario_atual)
         .first()
     )
     if not item:
@@ -92,6 +134,23 @@ async def pagina_detalhe_item(
     )
 
 
+import re
+
+def validar_email(email: str) -> bool:
+    padrao = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
+    return bool(padrao.match(email))
+
+def validar_senha(senha: str) -> tuple[bool, str]:
+    if len(senha) < 8:
+        return False, "A senha deve ter pelo menos 8 caracteres"
+    if not re.search(r'[A-Z]', senha):
+        return False, "A senha deve conter pelo menos uma letra maiúscula"
+    if not re.search(r'[a-z]', senha):
+        return False, "A senha deve conter pelo menos uma letra minúscula"
+    if not re.search(r'\d', senha):
+        return False, "A senha deve conter pelo menos um número"
+    return True, ""
+
 @app.post("/registrar", response_class=HTMLResponse)
 async def registrar_usuario(request: Request, db: Session = Depends(get_db)):
     form = await request.form()
@@ -103,6 +162,21 @@ async def registrar_usuario(request: Request, db: Session = Depends(get_db)):
         return templates.TemplateResponse(
             "registrar.html",
             {"request": request, "erro": "Todos os campos são obrigatórios"},
+            status_code=400
+        )
+        
+    if not validar_email(email):
+        return templates.TemplateResponse(
+            "registrar.html",
+            {"request": request, "erro": "Email inválido"},
+            status_code=400
+        )
+        
+    senha_valida, erro_senha = validar_senha(senha)
+    if not senha_valida:
+        return templates.TemplateResponse(
+            "registrar.html",
+            {"request": request, "erro": erro_senha},
             status_code=400
         )
 
@@ -121,7 +195,7 @@ async def registrar_usuario(request: Request, db: Session = Depends(get_db)):
             status_code=400
         )
 
-    senha_hash = hash_senha(senha)
+    senha_hash = hash_password(senha)
     db_usuario = Usuario(
         email=email, nome_usuario=nome_usuario, senha_hash=senha_hash
     )
@@ -141,7 +215,7 @@ async def login(request: Request, db: Session = Depends(get_db)):
 
     db_usuario = db.query(Usuario).filter(Usuario.email == email).first()
 
-    if not db_usuario or not verificar_senha(senha, db_usuario.senha_hash):
+    if not db_usuario or not verify_password(senha, db_usuario.senha_hash):
         return templates.TemplateResponse(
             "login.html",
             {"request": request, "error": "Email ou senha inválidos"},
@@ -149,66 +223,44 @@ async def login(request: Request, db: Session = Depends(get_db)):
         )
 
     # Gera o token JWT
-    token = criar_token_acesso({"sub": db_usuario.email})
+    token = create_token({"sub": db_usuario.email}, timedelta(minutes=MINUTOS_EXPIRACAO_TOKEN))
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(key="access_token", value=f"Bearer {token}", httponly=True)
     return response
 
 
-@app.post("/itens/criar")  # 3
-def criar_item(
-    item: ItemCreate,
+@app.get("/itens")
+async def listar_itens(
+    request: Request,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
 ):
-    db_item = Item(
-        titulo=item.titulo,
-        tipo=item.tipo,
-        status=item.status,
-        descricao=item.descricao,
-        avaliacao=item.avaliacao,
-        tags=",".join(item.tags),
-        favorito=item.favorito,
-        id_dono=usuario_atual.id,
+    usuario = db.query(Usuario).filter(Usuario.email == usuario_atual).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuário não encontrado")
+    
+    itens = db.query(Item).filter(Item.id_dono == usuario.id).all()
+    # Convert comma-separated tags to lists
+    for item in itens:
+        item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
+    
+    return templates.TemplateResponse(
+        "listar_itens.html", 
+        {"request": request, "itens": itens, "usuario_atual": usuario_atual}
     )
-    db.add(db_item)
-    db.commit()
-    db.refresh(db_item)
-    return db_item
-
-
-@app.get("/itens")  # 4
-def listar_itens(
-    tipo: Optional[TipoItem] = None,
-    status: Optional[StatusItem] = None,
-    tag: Optional[str] = None,
-    favorito: Optional[bool] = None,
-    db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
-):
-    query = db.query(Item).filter(Item.id_dono == usuario_atual.id)
-
-    if tipo:
-        query = query.filter(Item.tipo == tipo)
-    if status:
-        query = query.filter(Item.status == status)
-    if tag:
-        query = query.filter(Item.tags.like(f"%{tag}%"))
-    if favorito is not None:
-        query = query.filter(Item.favorito == favorito)
-
-    return query.all()
 
 
 @app.get("/itens/{item_id}")
-def obter_item(
+async def obter_item(
+    request: Request,
     item_id: int,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
 ):
     item = (
         db.query(Item)
-        .filter(Item.id == item_id, Item.id_dono == usuario_atual.id)
+        .join(Usuario)
+        .filter(Item.id == item_id, Usuario.email == usuario_atual)
         .first()
     )
     if item is None:
@@ -216,27 +268,58 @@ def obter_item(
     return item
 
 
-@app.put("/itens/{item_id}")
-def atualizar_item(
+@app.get("/itens/{item_id}/editar", response_class=HTMLResponse)
+async def pagina_editar_item(
+    request: Request,
     item_id: int,
-    item: ItemUpdate,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
+):
+    item = (
+        db.query(Item)
+        .join(Usuario)
+        .filter(Item.id == item_id, Usuario.email == usuario_atual)
+        .first()
+    )
+    if item is None:
+        raise HTTPException(status_code=404, detail="Item não encontrado")
+    
+    # Convert comma-separated tags to list
+    item.tags = [tag.strip() for tag in item.tags.split(",")] if item.tags else []
+    
+    return templates.TemplateResponse(
+        "criar_item.html",
+        {"request": request, "item": item, "usuario_atual": usuario_atual}
+    )
+
+@app.post("/itens/{item_id}/editar")
+async def atualizar_item(
+    request: Request,
+    item_id: int,
+    db: Session = Depends(get_db),
+    usuario_atual: str = Depends(get_current_user),
 ):
     db_item = (
         db.query(Item)
-        .filter(Item.id == item_id, Item.id_dono == usuario_atual.id)
+        .join(Usuario)
+        .filter(Item.id == item_id, Usuario.email == usuario_atual)
         .first()
     )
     if db_item is None:
         raise HTTPException(status_code=404, detail="Item não encontrado")
 
-    update_data = item.dict(exclude_unset=True)
+    data = await request.json()
+    
+    # Validate the update data using Pydantic
+    try:
+        update_data = ItemUpdate(**data)
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
-    if "tags" in update_data:
-        update_data["tags"] = ",".join(update_data["tags"])
-
-    for field, value in update_data.items():
+    # Update the item fields
+    for field, value in update_data.dict(exclude_unset=True).items():
+        if field == "tags":
+            value = ",".join(value)  # Convert list to comma-separated string
         setattr(db_item, field, value)
 
     db.commit()
@@ -245,14 +328,16 @@ def atualizar_item(
 
 
 @app.post("/itens/{item_id}/deletar", status_code=status.HTTP_303_SEE_OTHER)
-def deletar_item(
+async def deletar_item(
+    request: Request,
     item_id: int,
     db: Session = Depends(get_db),
-    usuario_atual: Usuario = Depends(obter_usuario_atual),
+    usuario_atual: str = Depends(get_current_user),
 ):
     item = (
         db.query(Item)
-        .filter(Item.id == item_id, Item.id_dono == usuario_atual.id)
+        .join(Usuario)
+        .filter(Item.id == item_id, Usuario.email == usuario_atual)
         .first()
     )
     if not item:
@@ -261,3 +346,9 @@ def deletar_item(
     db.delete(item)
     db.commit()
     return RedirectResponse(url="/itens", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/logout")
+async def logout(response: Response):
+    response.delete_cookie(key="token")
+    return RedirectResponse(url="/login", status_code=303)

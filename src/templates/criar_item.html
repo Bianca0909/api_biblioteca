@@ -2,63 +2,99 @@
 
 {% block content %}
 <div class="container mt-5">
-    <h2>Cadastrar Novo Item</h2>
-    <form id="form-criar-item" class="mt-4">
+    <h2>{% if item %}Editar Item{% else %}Cadastrar Novo Item{% endif %}</h2>
+    <form id="{% if item %}form-editar-item{% else %}form-criar-item{% endif %}" class="mt-4">
         <div class="mb-3">
             <label for="titulo" class="form-label">Título</label>
-            <input type="text" class="form-control" id="titulo" name="titulo" required minlength="3">
+            <input type="text" class="form-control" id="titulo" name="titulo" required minlength="3" value="{{ item.titulo if item else '' }}">
         </div>
         <div class="mb-3">
             <label for="descricao" class="form-label">Descrição</label>
-            <textarea class="form-control" id="descricao" name="descricao" rows="3" required minlength="10"></textarea>
+            <textarea class="form-control" id="descricao" name="descricao" rows="3" required minlength="10">{{ item.descricao if item else '' }}</textarea>
         </div>
         <div class="mb-3">
             <label for="tipo" class="form-label">Tipo</label>
             <select class="form-select" id="tipo" name="tipo" required>
                 <option value="">Selecione o tipo</option>
-                <option value="LIVRO">Livro</option>
-                <option value="FILME">Filme</option>
-                <option value="SERIE">Série</option>
+                <option value="livro" {% if item and item.tipo == "livro" %}selected{% endif %}>Livro</option>
+                <option value="filme" {% if item and item.tipo == "filme" %}selected{% endif %}>Filme</option>
+                <option value="serie" {% if item and item.tipo == "serie" %}selected{% endif %}>Série</option>
             </select>
         </div>
         <div class="mb-3">
             <label for="tags" class="form-label">Tags (separadas por vírgula)</label>
-            <input type="text" class="form-control" id="tags" name="tags" placeholder="ex: aventura, ficção, ação">
+            <input type="text" class="form-control" id="tags" name="tags" placeholder="ex: aventura, ficção, ação" value="{{ item.tags|join(', ') if item else '' }}">
         </div>
-        <button type="submit" class="btn btn-primary">Cadastrar</button>
+        <div class="mb-3">
+            <label for="status" class="form-label">Status</label>
+            <select class="form-select" id="status" name="status" required>
+                <option value="para_ler" {% if item and item.status == "para_ler" %}selected{% endif %}>Para Ler/Assistir</option>
+                <option value="lendo" {% if item and item.status == "lendo" %}selected{% endif %}>Em Andamento</option>
+                <option value="completado" {% if item and item.status == "completado" %}selected{% endif %}>Completado</option>
+            </select>
+        </div>
+        <div class="mb-3">
+            <label for="avaliacao" class="form-label">Avaliação (0-5)</label>
+            <input type="number" class="form-control" id="avaliacao" name="avaliacao" min="0" max="5" value="{{ item.avaliacao if item else 0 }}">
+        </div>
+        <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" id="favorito" name="favorito" {% if item and item.favorito %}checked{% endif %}>
+            <label class="form-check-label" for="favorito">Favorito</label>
+        </div>
+        <button type="submit" class="btn btn-primary">{% if item %}Salvar Alterações{% else %}Cadastrar{% endif %}</button>
+        {% if item %}<a href="/itens" class="btn btn-secondary">Cancelar</a>{% endif %}
     </form>
 </div>
 
 <script>
-document.getElementById('form-criar-item').addEventListener('submit', async (e) => {
+const form = document.getElementById('{% if item %}form-editar-item{% else %}form-criar-item{% endif %}');
+form.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const formData = new FormData(e.target);
+    console.log('Raw form data:', Object.fromEntries(formData));
+    const tags = formData.get('tags') || '';
+    const tipo = formData.get('tipo');
+    console.log('Selected tipo:', tipo);
+    
     const data = {
         titulo: formData.get('titulo'),
         descricao: formData.get('descricao'),
-        tipo: formData.get('tipo'),
-        tags: formData.get('tags').split(',').map(tag => tag.trim()).filter(tag => tag)
+        tipo: tipo,
+        status: formData.get('status'),
+        avaliacao: parseInt(formData.get('avaliacao')) || 0,
+        favorito: formData.get('favorito') === 'on',
+        tags: tags ? tags.split(',').map(tag => tag.trim()).filter(tag => tag) : []
     };
     
+    console.log('Constructed data:', data);
+    
     try {
-        const response = await fetch('/itens/', {
+        const payload = data;
+        console.log('Request payload:', payload);
+
+        const response = await fetch('{% if item %}/itens/{{ item.id }}/editar{% else %}/itens/criar{% endif %}', {
             method: 'POST',
             headers: {
-                'Content-Type': 'application/json',
-                'Authorization': localStorage.getItem('token')
+                'Content-Type': 'application/json'
             },
-            body: JSON.stringify(data)
+            body: JSON.stringify(payload)
         });
         
         if (response.ok) {
             window.location.href = '/itens';
         } else {
             const error = await response.json();
-            alert(error.detail || 'Erro ao criar item');
+            console.error('Error response:', JSON.stringify(error, null, 2));
+            if (error.detail) {
+                alert(typeof error.detail === 'string' ? error.detail : JSON.stringify(error.detail, null, 2));
+            } else {
+                alert('Erro ao criar item');
+            }
         }
     } catch (error) {
-        alert('Erro ao criar item');
+        console.error('Network error:', error);
+        alert('Erro ao criar item: ' + error.message);
     }
 });
 </script>
