@@ -1,10 +1,20 @@
 # Biblioteca Pessoal API
 
-API para gerenciar sua lista pessoal de livros, filmes e séries. Inclui autenticação de usuários e proteção de rotas.
+API para gerenciar sua lista pessoal de livros, filmes e séries. Interface web com autenticação de usuários, gerenciamento de itens e funcionalidades de busca.
+
+## Funcionalidades
+
+- Autenticação de usuários com validação de email e senha
+- Interface web responsiva usando Bootstrap 5
+- Gerenciamento completo de itens (criar, editar, excluir)
+- Busca por título de itens
+- Suporte a tags e favoritos
+- Avaliações de 1 a 5 estrelas
+- Status de progresso (para ler, lendo, completado)
 
 ## Requisitos
 
-- Python 3.8+
+- Python 3.12+
 - FastAPI
 - Uvicorn
 - Pydantic
@@ -12,6 +22,8 @@ API para gerenciar sua lista pessoal de livros, filmes e séries. Inclui autenti
 - PyJWT
 - bcrypt
 - email-validator
+- Jinja2
+- Bootstrap 5
 
 ## Instalação
 
@@ -41,88 +53,58 @@ Documentação Swagger UI: `http://localhost:8000/docs`
 ### Autenticação
 
 - `POST /registrar`: Registrar novo usuário
-  ```bash
-  curl -X POST "http://localhost:8000/registrar" -H "Content-Type: application/json" -d '{
-    "email": "usuario@exemplo.com",
-    "nome_usuario": "usuario",
-    "senha": "senha123"
-  }'
-  ```
+  - Validação de email (formato válido)
+  - Validação de senha (mínimo 8 caracteres, 1 maiúscula, 1 minúscula, 1 número)
 
-- `POST /login`: Fazer login e obter token de acesso
-  ```bash
-  curl -X POST "http://localhost:8000/login" \
-    -H "Content-Type: application/x-www-form-urlencoded" \
-    -d "username=usuario@exemplo.com&password=senha123"
-  ```
+- `POST /login`: Fazer login (cookie httponly)
+- `GET /logout`: Fazer logout (limpa cookie de autenticação)
 
 ### Itens (Requer Autenticação)
 
-Todas as rotas de itens requerem o token de acesso no header `Authorization: Bearer <token>`
+Todas as rotas requerem cookie de autenticação válido
 
-- `POST /itens`: Adicionar novo item (livro/filme/série)
-- `GET /itens`: Listar todos os itens
-  - Filtros opcionais:
-    - `type`: Filtrar por tipo (book/movie/series)
-    - `status`: Filtrar por status (to_read/reading/completed)
-    - `tag`: Filtrar por tag específica
-    - `favourite`: Filtrar por favoritos (true/false)
-- `GET /itens/{id}`: Ver detalhes de um item específico
-- `PUT /itens/{id}`: Atualizar um item
-- `DELETE /itens/{id}`: Remover um item
+- `GET /itens`: Página de listagem de itens
+  - Busca por título
+  - Visualização em cards
+  - Ações rápidas (editar/excluir)
 
-### Exemplos de Uso
+- `GET /itens/criar`: Página de criação de item
+- `POST /itens/criar`: Criar novo item
+  - Título, tipo (livro/filme/série)
+  - Status (para_ler/lendo/completado)
+  - Descrição e avaliação
+  - Tags e favorito
 
-#### 1. Registrar um novo usuário:
-```bash
-curl -X POST "http://localhost:8000/registrar" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "email": "usuario@exemplo.com",
-    "nome_usuario": "usuario",
-    "senha": "senha123"
-  }'
-```
+- `GET /itens/{id}/editar`: Página de edição
+- `POST /itens/{id}/editar`: Atualizar item
+- `POST /itens/{id}/deletar`: Remover item
 
-#### 2. Fazer login e obter token:
-```bash
-curl -X POST "http://localhost:8000/login" \
-  -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "username=usuario@exemplo.com&password=senha123"
-```
+## Interface Web
 
-#### 3. Adicionar um novo item (com token):
-```bash
-curl -X POST "http://localhost:8000/itens" \
-  -H "Authorization: Bearer seu_token_aqui" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "titulo": "O Senhor dos Anéis",
-    "tipo": "livro",
-    "status": "lendo",
-    "descricao": "Trilogia épica de fantasia",
-    "avaliacao": 5,
-    "tags": ["fantasia", "aventura", "clássico"],
-    "favorito": true
-  }'
-```
+1. Página inicial (`/`)
+   - Boas-vindas e status de autenticação
+   - Link para login/registro
 
-#### 4. Exemplos de Filtros (com token)
+2. Autenticação
+   - Login (`/login`)
+   - Registro (`/registrar`)
+   - Logout (`/logout`)
 
-```bash
-# Listar apenas livros
-curl "http://localhost:8000/itens?tipo=livro" \
-  -H "Authorization: Bearer seu_token_aqui"
+3. Gerenciamento de Itens
+   - Listagem (`/itens`)
+     - Cards com informações resumidas
+     - Busca por título
+     - Botões de ação (editar/excluir)
+   
+   - Criação (`/itens/criar`)
+     - Formulário completo
+     - Validação em tempo real
+     - Preview antes de salvar
 
-# Listar itens com tag específica
-curl "http://localhost:8000/itens?tag=fantasia" \
-  -H "Authorization: Bearer seu_token_aqui"
+   - Edição (`/itens/{id}/editar`)
+     - Mesmo formulário da criação
+     - Dados pré-preenchidos
 
-# Listar favoritos
-curl "http://localhost:8000/itens?favorito=true" \
-  -H "Authorization: Bearer seu_token_aqui"
-
-# Listar itens em leitura/andamento
-curl "http://localhost:8000/itens?status=lendo" \
-  -H "Authorization: Bearer seu_token_aqui"
-```
+   - Detalhes (`/itens/{id}`)
+     - Visualização completa
+     - Todas as informações do item
